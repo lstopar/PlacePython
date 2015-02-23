@@ -174,7 +174,7 @@ BONUS_COLS = [
 
 def read_args():
     if len(sys.argv) < 3:
-        print 'Run command: transform.py in_file out_file'
+        print 'Usage: transform.py in_file out_file'
         exit(1)
     
     script = sys.argv[0]
@@ -206,26 +206,30 @@ def calc_accessories(row):
     return calc_addons(row, ACCESORY_COLS)
 
 def calc_bonuses(row):
-    '''Calculates the positive and negative bonuses (dodatki) along with their counts'''
+    '''Calculates the positive and negative bonuses along with their counts'''
     return calc_addons(row, BONUS_COLS)
 
-def transform(f_in, f_out):
-    print 'reading input file ...'
+def transform(fname_in, fname_out):
+    print 'Transforming file ...'
     
-    data = list(csv.DictReader(open(f_in, 'rU')))
+    print 'Creating I/O streams ...'
+    f_in = open(fname_in, 'rU')
+    f_out = open(fname_out, 'w')
+    
+    reader = csv.DictReader(f_in, delimiter='\t')
     writer = csv.DictWriter(f_out, fieldnames=OUT_FIELDS)
     
-    print str(len(data))
-    
+    print 'Writing ...'
     writer.writeheader()
-    for i, row in data:
+    
+    for i, row in enumerate(reader):
         if i % 1000 == 0:
             print str(i)
         
         try:
             employee_id = row['sifra_zaposlenega_z360']
-            time = datetime.datetime(year=int(row['leto_obracuna']), month=int(row['mesec_obracuna']))
-            salary = row['placa']
+            time = datetime(year=int(row['leto_obracuna']), month=int(row['mesec_obracuna']), day=1)
+            salary = row['placa_redno_delo_a010bruto']
             diff_min_salary = row['placa_razlika_do_min_place_a020bruto']
             ministry_code = row['sifra_pu']
             ministry_name = row['naziv_pu']
@@ -256,11 +260,19 @@ def transform(f_in, f_out):
                 'stevilo_bonusov_neg': bonus_neg_count,
                 'vsota_bonusov_neg': bonus_neg
             })
-            
         except Exception:
-            print 'Could not parse row: ' + i
-            traceback.format_exc()
-        
+            print 'Could not parse row: ' + str(i)
+            traceback.print_exc()
+            break
+    
+    print 'Closing streams ...'
+    # flush and close
+    f_out.flush()
+    
+    f_in.close()
+    f_out.close()
+    
+    print 'Done!'
     
 # read CMD arguments to extract the file path
 f_in, f_out = read_args()
