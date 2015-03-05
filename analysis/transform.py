@@ -2,6 +2,7 @@ import sys
 import csv
 import traceback
 from datetime import datetime
+from sets import Set
 
 OUT_FIELDS = [
     'id',
@@ -222,6 +223,14 @@ def transform(fname_in, fname_out):
     print 'Writing ...'
     writer.writeheader()
     
+    # if you see lines with duplicate: obdobje, delovno mesto, naziv delovnega mesta, placilni razred
+    # proracunski uporabnik, 
+    
+    users = {}
+    sum_cols = Set(['placa', 'razlika_minimalec', 'stevilo_dodatkov_pos', 'vsota_dodatkov_pos', 'stevilo_dodatkov_neg', 'vsota_dodatkov_neg', 'stevilo_bonusov_pos', 'vsota_bonusov_pos', 'stevilo_bonusov_neg', 'vsota_bonusov_neg'])
+    
+    print 'Reading ...'
+    
     for i, row in enumerate(reader):
         if i % 1000 == 0:
             print str(i)
@@ -229,19 +238,34 @@ def transform(fname_in, fname_out):
         try:
             employee_id = row['sifra_zaposlenega_z360']
             time = datetime(year=int(row['leto_obracuna']), month=int(row['mesec_obracuna']), day=1)
-            salary = row['placa_redno_delo_a010bruto']
-            diff_min_salary = row['placa_razlika_do_min_place_a020bruto']
+            salary = float(row['placa_redno_delo_a010bruto'])
+            diff_min_salary = float(row['placa_razlika_do_min_place_a020bruto'])
             ministry_code = row['sifra_pu']
             ministry_name = row['naziv_pu']
             position = row['sifra_delovnega_mesta_z370']
             position_desc = row['opis_delovnega_mesta_z370opis']
+            position_code = row['sifra_naziva_delovnega_mesta_z371']
             payment_grade = row['placni_razred_z380']  # placilni razred
+            pu_code = row['sifra_pu']
             
             acc_pos_count, acc_pos, acc_neg_count, acc_neg = calc_accessories(row)
             bonus_pos_count, bonus_pos, bonus_neg_count, bonus_neg = calc_bonuses(row)
             
-            # write to output
-            writer.writerow({
+            # needed to sum up the duplicates
+            if not employee_id in users:
+                users[employee_id] = {}
+            if not position in users[employee_id]:
+                users[employee_id][position] = {}
+            if not position_code in users[employee_id][position]:
+                users[employee_id][position][position_code] = {}
+            if not payment_grade in users[employee_id][position][position_code]:
+                users[employee_id][position][position_code][payment_grade] = {}
+            if not time in users[employee_id][position][position_code][payment_grade]:
+                users[employee_id][position][position_code][payment_grade][time] = {}
+            if not pu_code in users[employee_id][position][position_code][payment_grade][time]:
+                users[employee_id][position][position_code][payment_grade][time][pu_code] = []
+                
+            users[employee_id][position][position_code][payment_grade][time][pu_code].append({
                 'id': employee_id,
                 'cas': time,
                 'ministry_id': ministry_code,
@@ -259,11 +283,56 @@ def transform(fname_in, fname_out):
                 'vsota_bonusov_pos': bonus_pos,
                 'stevilo_bonusov_neg': bonus_neg_count,
                 'vsota_bonusov_neg': bonus_neg
-            })
+            })            
+           
         except Exception:
             print 'Could not parse row: ' + str(i)
             traceback.print_exc()
             break
+        
+    
+    print 'Writing ...'
+    print 'Total employees: ' + str(len(users)) + ', processing ...'
+    k = 0
+    for employee_id in users:
+        k += 1
+        
+        if k % 1000 == 0:
+            print str(k)
+        
+        for position in users[employee_id]:
+            for position_code in users[employee_id][position]:
+                for payment_grade in users[employee_id][position][position_code]:
+                    for time in users[employee_id][position][position_code][payment_grade]:
+                        for pu_code in users[employee_id][position][position_code][payment_grade][time]:
+                            usr_rows = users[employee_id][position][position_code][payment_grade][time][pu_code]
+                            usr_row1 = users[employee_id][position][position_code][payment_grade][time][pu_code][0]
+                            
+                            # sum up the things
+                            sums = { key: 0 for key in sum_cols }
+                            
+                            for row in usr_rows:
+                                for key in sum_cols:
+                                    sums[key] += row[key]
+                            
+                            row = {
+                                'id': employee_id,
+                                'cas': time,
+                                'ministry_id': usr_row1['ministry_id'],
+                                'ministry_desc': usr_row1['ministry_desc'],
+                                'delovno_mesto': position,
+                                'delovno_mesto_desc': usr_row1['delovno_mesto_desc'],
+                                'placilni_razred': payment_grade
+                            }
+                            
+                            for key in sums:
+                                row[key] = sums[key]
+                                
+                            if len(usr_rows) > 1:
+                                print 'User ' + usr_row1['id'] + 'Has multiple entries: ' + str(usr_rows) + ', summed up and got result: ' + str(row)
+                            
+                            # write to output
+                            writer.writerow(row)
     
     print 'Closing streams ...'
     # flush and close

@@ -10,6 +10,9 @@ def read_args():
         
     return sys.argv[1]
 
+def plot_place():
+    print 'Not implemented!!'
+
 
 fname = read_args()
 data = pd.read_csv(fname)
@@ -17,5 +20,5 @@ data = pd.read_csv(fname)
 data1 = data[['ministry_id', 'placa', 'stevilo_dodatkov_pos', 'vsota_dodatkov_pos']]
 grouped = data1.groupby('ministry_id')
 means = grouped.aggregate(np.mean)
-means.sort('vsota_dodatkov_pos', ascending=0)[:30]['vsota_dodatkov_pos'].plot(kind='bar')
+means.sort('vsota_dodatkov_neg', ascending=1)[:30]['vsota_dodatkov_pos'].plot(kind='bar')
 means.sort('stevilo_dodatkov_pos', ascending=0)[:100]['stevilo_dodatkov_pos'].plot(kind='bar')
